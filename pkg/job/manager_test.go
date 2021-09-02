@@ -41,7 +41,7 @@ func (e *testExec) Execute(ctx context.Context, p *Progress) {
 }
 
 func TestAdd(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 
 	const jobName = "test job"
 	exec1 := newTestExec(make(chan struct{}))
@@ -81,6 +81,8 @@ func TestAdd(t *testing.T) {
 	const otherJobName = "other job name"
 	exec2 := newTestExec(make(chan struct{}))
 	job2ID := m.Add(context.Background(), otherJobName, exec2)
+
+	time.Sleep(sleepTime)
 
 	// expect status to be ready
 	j2 := m.GetJob(job2ID)
@@ -125,7 +127,7 @@ func TestAdd(t *testing.T) {
 }
 
 func TestCancel(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 
 	// add two jobs
 	const jobName = "test job"
@@ -143,6 +145,8 @@ func TestCancel(t *testing.T) {
 
 	// expect job to be cancelled
 	assert := assert.New(t)
+
+	time.Sleep(sleepTime)
 	j := m.GetJob(job2ID)
 	assert.Equal(StatusCancelled, j.Status)
 
@@ -193,7 +197,7 @@ func TestCancel(t *testing.T) {
 }
 
 func TestCancelAll(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 
 	// add two jobs
 	const jobName = "test job"
@@ -235,7 +239,7 @@ func TestCancelAll(t *testing.T) {
 }
 
 func TestSubscribe(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 
 	m.updateThrottleLimit = time.Millisecond * 100
 
@@ -329,6 +333,9 @@ func TestSubscribe(t *testing.T) {
 	jobID = m.Add(context.Background(), jobName, exec2)
 
 	m.CancelJob(jobID)
+
+	// allow the job to finish
+	close(exec2.finish)
 
 	select {
 	case removedJob := <-s.RemovedJob:

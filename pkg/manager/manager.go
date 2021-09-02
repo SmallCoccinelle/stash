@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -69,7 +70,7 @@ func Initialize() *singleton {
 
 		instance = &singleton{
 			Config:        cfg,
-			JobManager:    job.NewManager(),
+			JobManager:    job.NewManager(context.TODO()),
 			DownloadStore: NewDownloadStore(),
 			PluginCache:   plugin.NewCache(cfg),
 
