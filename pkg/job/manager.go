@@ -19,7 +19,7 @@ type Manager struct {
 	mutex     sync.Mutex
 	pending   chan *Job // Pending jobs for the manager
 	completed chan *Job // Jobs which are completed
-	canceled  chan int  // Cancel requests. Sending -1 cancels all jobs
+	cancelled chan int  // Cancel requests. Sending -1 cancels all jobs
 
 	lastID              int
 	subscriptions       []*ManagerSubscription
@@ -31,7 +31,7 @@ func NewManager(ctx context.Context) *Manager {
 	ret := &Manager{
 		pending:             make(chan *Job),
 		completed:           make(chan *Job),
-		canceled:            make(chan int),
+		cancelled:           make(chan int),
 		updateThrottleLimit: defaultThrottleLimit,
 	}
 
@@ -144,7 +144,7 @@ func (m *Manager) dispatcher(ctx context.Context) {
 			m.addJob(j)
 		case j := <-m.completed:
 			m.completeJob(j)
-		case id := <-m.canceled:
+		case id := <-m.cancelled:
 			m.cancelJob(id)
 		case <-ctx.Done():
 			// Cancel everything, drain stopped jobs
@@ -251,13 +251,13 @@ func (m *Manager) getJob(list []*Job, id int) (index int, job *Job) {
 // removed from the queue. If no job exists with the provided id, then there is
 // no effect. Likewise, if the job is already cancelled, there is no effect.
 func (m *Manager) CancelJob(id int) {
-	m.canceled <- id
+	m.cancelled <- id
 }
 
 // CancelAll cancels all of the jobs in the queue. This is the same as
 // calling CancelJob on all jobs in the queue.
 func (m *Manager) CancelAll() {
-	m.canceled <- -1
+	m.cancelled <- -1
 }
 
 // cancelJob cancels the job with the given id. It returns the number of
