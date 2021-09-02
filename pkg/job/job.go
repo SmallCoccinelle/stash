@@ -46,6 +46,9 @@ const (
 type Job struct {
 	ID     int
 	Status Status
+
+	Immediate bool // true when the job should be started immediately
+
 	// details of the current operations of the job
 	Details     []string
 	Description string
@@ -58,6 +61,22 @@ type Job struct {
 	outerCtx   context.Context
 	exec       JobExec
 	cancelFunc context.CancelFunc
+}
+
+func (j *Job) complete() {
+	// Handle the job status
+	if j.Status == StatusStopping {
+		j.Status = StatusCancelled
+	} else {
+		j.Status = StatusFinished
+	}
+
+	// Set completion time
+	t := time.Now()
+	j.EndTime = &t
+
+	// Clear any job details
+	j.Details = nil
 }
 
 func (j *Job) cancel() {
