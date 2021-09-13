@@ -3,10 +3,11 @@ package sqlite
 import (
 	"errors"
 	"fmt"
-	"github.com/stashapp/stash/pkg/logger"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/stashapp/stash/pkg/logger"
 
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/utils"
@@ -192,6 +193,7 @@ func (f *filterBuilder) addWith(sql string, args ...interface{}) {
 }
 
 // addRecursiveWith adds a with clause and arguments to the filter, and sets it to recursive
+//nolint:unused
 func (f *filterBuilder) addRecursiveWith(sql string, args ...interface{}) {
 	if sql == "" {
 		return
