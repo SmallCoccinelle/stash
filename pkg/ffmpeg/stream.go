@@ -32,7 +32,9 @@ func (s *Stream) Serve(w http.ResponseWriter, r *http.Request) {
 	notify := r.Context().Done()
 	go func() {
 		<-notify
-		s.Process.Kill()
+		if err := s.Process.Kill(); err != nil {
+			logger.Warnf("enable to kill os process %v: %v", s.Process.Pid, err)
+		}
 	}()
 
 	_, err := io.Copy(w, s.Stdout)
@@ -224,7 +226,11 @@ func (e *Encoder) stream(probeResult VideoFile, options TranscodeStreamOptions) 
 	}
 
 	registerRunningEncoder(probeResult.Path, cmd.Process)
-	go waitAndDeregister(probeResult.Path, cmd)
+	go func() {
+		if err := waitAndDeregister(probeResult.Path, cmd); err != nil {
+			logger.Warnf("Error while deregistering ffmpeg stream: %v", err)
+		}
+	}()
 
 	// stderr must be consumed or the process deadlocks
 	go func() {

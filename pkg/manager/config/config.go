@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/manager/paths"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/utils"
@@ -453,7 +454,10 @@ func (i *Instance) GetStashBoxes() []*models.StashBox {
 	i.RLock()
 	defer i.RUnlock()
 	var boxes []*models.StashBox
-	viper.UnmarshalKey(StashBoxes, &boxes)
+	if err := viper.UnmarshalKey(StashBoxes, &boxes); err != nil {
+		logger.Warnf("error in unmarshalkey: %v", err)
+	}
+
 	return boxes
 }
 
@@ -801,7 +805,9 @@ func (i *Instance) SetCSS(css string) {
 
 	buf := []byte(css)
 
-	ioutil.WriteFile(fn, buf, 0777)
+	if err := ioutil.WriteFile(fn, buf, 0777); err != nil {
+		logger.Warnf("error while writing %v bytes to %v: %v", len(buf), fn, err)
+	}
 }
 
 func (i *Instance) GetCSSEnabled() bool {
@@ -945,8 +951,7 @@ func (i *Instance) SetChecksumDefaultValues(defaultAlgorithm models.HashAlgorith
 	viper.SetDefault(CalculateMD5, usingMD5)
 }
 
-func (i *Instance) setDefaultValues() error {
-
+func (i *Instance) setDefaultValues(write bool) error {
 	// read data before write lock scope
 	defaultDatabaseFilePath := i.GetDefaultDatabaseFilePath()
 	defaultScrapersPath := i.GetDefaultScrapersPath()
@@ -970,11 +975,23 @@ func (i *Instance) setDefaultValues() error {
 	// Set default scrapers and plugins paths
 	viper.SetDefault(ScrapersPath, defaultScrapersPath)
 	viper.SetDefault(PluginsPath, defaultPluginsPath)
-	return viper.WriteConfig()
+	if write {
+		return viper.WriteConfig()
+	}
+
+	return nil
+}
+
+func (i *Instance) SetInitialConfig() error {
+	return i.setInitialConfig(true)
+}
+
+func (i *Instance) SetInitialMemoryConfig() error {
+	return i.setInitialConfig(false)
 }
 
 // SetInitialConfig fills in missing required config fields
-func (i *Instance) SetInitialConfig() error {
+func (i *Instance) setInitialConfig(write bool) error {
 	// generate some api keys
 	const apiKeyLength = 32
 
@@ -988,7 +1005,7 @@ func (i *Instance) SetInitialConfig() error {
 		i.Set(SessionStoreKey, sessionStoreKey)
 	}
 
-	return i.setDefaultValues()
+	return i.setDefaultValues(write)
 }
 
 func (i *Instance) FinalizeSetup() {

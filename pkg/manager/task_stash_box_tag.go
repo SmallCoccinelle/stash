@@ -47,7 +47,7 @@ func (t *StashBoxPerformerTagTask) stashBoxPerformerTag() {
 
 	if t.refresh {
 		var performerID string
-		t.txnManager.WithReadTxn(context.TODO(), func(r models.ReaderRepository) error {
+		txnErr := t.txnManager.WithReadTxn(context.TODO(), func(r models.ReaderRepository) error {
 			stashids, _ := r.Performer().GetStashIDs(t.performer.ID)
 			for _, id := range stashids {
 				if id.Endpoint == t.box.Endpoint {
@@ -56,6 +56,9 @@ func (t *StashBoxPerformerTagTask) stashBoxPerformerTag() {
 			}
 			return nil
 		})
+		if txnErr != nil {
+			logger.Warnf("error while executing read transaction: %v", err)
+		}
 		if performerID != "" {
 			performer, err = client.FindStashBoxPerformerByID(performerID)
 		}
@@ -153,7 +156,7 @@ func (t *StashBoxPerformerTagTask) stashBoxPerformerTag() {
 				partial.URL = &value
 			}
 
-			t.txnManager.WithTxn(context.TODO(), func(r models.Repository) error {
+			txnErr := t.txnManager.WithTxn(context.TODO(), func(r models.Repository) error {
 				_, err := r.Performer().Update(partial)
 
 				if !t.refresh {
@@ -188,6 +191,9 @@ func (t *StashBoxPerformerTagTask) stashBoxPerformerTag() {
 				}
 				return err
 			})
+			if txnErr != nil {
+				logger.Warnf("failure to execute partial update of performer: %v", err)
+			}
 		} else if t.name != nil && performer.Name != nil {
 			currentTime := time.Now()
 			newPerformer := models.Performer{
