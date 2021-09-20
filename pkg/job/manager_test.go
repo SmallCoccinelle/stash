@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const timeout = 5 * time.Second
 const sleepTime time.Duration = 10 * time.Millisecond
 
 type testExec struct {
@@ -41,7 +42,11 @@ func (e *testExec) Execute(ctx context.Context, p *Progress) {
 }
 
 func TestAdd(t *testing.T) {
-	m := NewManager(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := NewManager(ctx)
+	s := m.Subscribe(ctx)
 
 	const jobName = "test job"
 	exec1 := newTestExec(make(chan struct{}))
@@ -51,8 +56,12 @@ func TestAdd(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal(1, jobID)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait until the job registers
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job subscription")
+	}
 
 	// expect job to have started
 	select {
@@ -82,7 +91,12 @@ func TestAdd(t *testing.T) {
 	exec2 := newTestExec(make(chan struct{}))
 	job2ID := m.Add(context.Background(), otherJobName, exec2)
 
-	time.Sleep(sleepTime)
+	// Wait until the job registers
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job subscription")
+	}
 
 	// expect status to be ready
 	j2 := m.GetJob(job2ID)
@@ -99,8 +113,12 @@ func TestAdd(t *testing.T) {
 	// allow first job to finish
 	close(exec1.finish)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait until the job finishes
+	select {
+	case <-s.removedJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for job removal")
+	}
 
 	// expect first job to be finished
 	j = m.GetJob(jobID)
@@ -127,26 +145,47 @@ func TestAdd(t *testing.T) {
 }
 
 func TestCancel(t *testing.T) {
-	m := NewManager(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := NewManager(ctx)
+	s := m.Subscribe(ctx)
 
 	// add two jobs
 	const jobName = "test job"
 	exec1 := newTestExec(make(chan struct{}))
 	jobID := m.Add(context.Background(), jobName, exec1)
 
+	// Wait until the job registers
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job subscription")
+	}
+
 	const otherJobName = "other job"
 	exec2 := newTestExec(make(chan struct{}))
 	job2ID := m.Add(context.Background(), otherJobName, exec2)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait until the job registers
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job subscription")
+	}
 
 	m.CancelJob(job2ID)
 
 	// expect job to be cancelled
 	assert := assert.New(t)
 
-	time.Sleep(sleepTime)
+	// Wait until the job is removed
+	select {
+	case <-s.removedJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job removal")
+	}
+
 	j := m.GetJob(job2ID)
 	assert.Equal(StatusCancelled, j.Status)
 
@@ -166,7 +205,6 @@ func TestCancel(t *testing.T) {
 	// cancel running job
 	m.CancelJob(jobID)
 
-	// wait a tiny bit
 	time.Sleep(sleepTime)
 
 	// expect status to be stopping
@@ -179,8 +217,12 @@ func TestCancel(t *testing.T) {
 	// allow first job to finish
 	close(exec1.finish)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait until the job is removed
+	select {
+	case <-s.removedJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for job removal")
+	}
 
 	// expect job to be removed from the queue
 	assert.Len(m.GetQueue(), 0)
@@ -197,27 +239,46 @@ func TestCancel(t *testing.T) {
 }
 
 func TestCancelAll(t *testing.T) {
-	m := NewManager(context.TODO())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := NewManager(ctx)
+	s := m.Subscribe(ctx)
 
 	// add two jobs
 	const jobName = "test job"
 	exec1 := newTestExec(make(chan struct{}))
 	jobID := m.Add(context.Background(), jobName, exec1)
 
+	// Wait for job addition
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job to arrive")
+	}
+
 	const otherJobName = "other job"
 	exec2 := newTestExec(make(chan struct{}))
 	job2ID := m.Add(context.Background(), otherJobName, exec2)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait for job addition
+	select {
+	case <-s.newJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job to arrive")
+	}
 
 	m.CancelAll()
 
 	// allow first job to finish
 	close(exec1.finish)
 
-	// wait a tiny bit
-	time.Sleep(sleepTime)
+	// Wait for job removal
+	select {
+	case <-s.removedJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for new job to be removed")
+	}
 
 	// expect all jobs to be cancelled
 	assert := assert.New(t)
