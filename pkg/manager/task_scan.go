@@ -408,6 +408,7 @@ func (t *ScanTask) scanGallery() {
 			return
 		}
 
+		isNewGallery := false
 		if err := t.TxnManager.WithTxn(context.TODO(), func(r models.Repository) error {
 			qb := r.Gallery()
 			g, _ = qb.FindByChecksum(checksum)
@@ -473,7 +474,7 @@ func (t *ScanTask) scanGallery() {
 					}
 					scanImages = true
 
-					GetInstance().PluginCache.ExecutePostHooks(t.ctx, g.ID, plugin.GalleryCreatePost, nil, nil)
+					isNewGallery = true
 				}
 			}
 
@@ -481,6 +482,10 @@ func (t *ScanTask) scanGallery() {
 		}); err != nil {
 			logger.Error(err.Error())
 			return
+		}
+
+		if isNewGallery {
+			GetInstance().PluginCache.ExecutePostHooks(t.ctx, g.ID, plugin.GalleryCreatePost, nil, nil)
 		}
 	}
 
@@ -1150,11 +1155,19 @@ func (t *ScanTask) scanImage() {
 		} else if config.GetInstance().GetCreateGalleriesFromFolders() {
 			// create gallery from folder or associate with existing gallery
 			logger.Infof("Associating image %s with folder gallery", i.Path)
+			var galleryID int
+			var isNewGallery bool
 			if err := t.TxnManager.WithTxn(context.TODO(), func(r models.Repository) error {
-				return t.associateImageWithFolderGallery(i.ID, r.Gallery())
+				var err error
+				galleryID, isNewGallery, err = t.associateImageWithFolderGallery(i.ID, r.Gallery())
+				return err
 			}); err != nil {
 				logger.Error(err.Error())
 				return
+			}
+
+			if isNewGallery {
+				GetInstance().PluginCache.ExecutePostHooks(t.ctx, galleryID, plugin.GalleryCreatePost, nil, nil)
 			}
 		}
 	}
@@ -1217,12 +1230,13 @@ func (t *ScanTask) rescanImage(i *models.Image, fileModTime time.Time) (*models.
 	return ret, nil
 }
 
-func (t *ScanTask) associateImageWithFolderGallery(imageID int, qb models.GalleryReaderWriter) error {
+func (t *ScanTask) associateImageWithFolderGallery(imageID int, qb models.GalleryReaderWriter) (galleryID int, isNew bool, err error) {
 	// find a gallery with the path specified
 	path := filepath.Dir(t.FilePath)
-	g, err := qb.FindByPath(path)
+	var g *models.Gallery
+	g, err = qb.FindByPath(path)
 	if err != nil {
-		return err
+		return
 	}
 
 	if g == nil {
@@ -1248,13 +1262,16 @@ func (t *ScanTask) associateImageWithFolderGallery(imageID int, qb models.Galler
 		logger.Infof("Creating gallery for folder %s", path)
 		g, err = qb.Create(newGallery)
 		if err != nil {
-			return err
+			return 0, false, err
 		}
+
+		isNew = true
 	}
 
 	// associate image with gallery
 	err = gallery.AddImage(qb, g.ID, imageID)
-	return err
+	galleryID = g.ID
+	return
 }
 
 func (t *ScanTask) generateThumbnail(i *models.Image) {

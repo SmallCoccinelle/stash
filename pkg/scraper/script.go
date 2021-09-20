@@ -1,9 +1,9 @@
 package scraper
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
@@ -68,12 +68,7 @@ func (s *scriptScraper) runScraperScript(inString string, out interface{}) error
 		return errors.New("error running scraper script")
 	}
 
-	scanner := bufio.NewScanner(stderr)
-	go func() { // log errors from stderr pipe
-		for scanner.Scan() {
-			logger.Errorf("scraper: %s", scanner.Text())
-		}
-	}()
+	go handleScraperStderr(s.config.Name, stderr)
 
 	logger.Debugf("Scraper script <%s> started", strings.Join(cmd.Args, " "))
 
@@ -254,4 +249,14 @@ func findPythonExecutable() (string, error) {
 	}
 
 	return "python3", nil
+}
+
+func handleScraperStderr(name string, scraperOutputReader io.ReadCloser) {
+	const scraperPrefix = "[Scrape / %s] "
+
+	lgr := logger.PluginLogger{
+		Prefix:          fmt.Sprintf(scraperPrefix, name),
+		DefaultLogLevel: &logger.ErrorLevel,
+	}
+	lgr.HandlePluginStdErr(scraperOutputReader)
 }
