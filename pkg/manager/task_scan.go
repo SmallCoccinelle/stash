@@ -107,7 +107,8 @@ func (j *ScanJob) Execute(ctx context.Context, progress *job.Progress) {
 			}
 
 			go func() {
-				task.Start(&wg)
+				task.Start()
+				wg.Done()
 				progress.Increment()
 			}()
 
@@ -219,9 +220,7 @@ type ScanTask struct {
 	CaseSensitiveFs      bool
 }
 
-func (t *ScanTask) Start(wg *sizedwaitgroup.SizedWaitGroup) {
-	defer wg.Done()
-
+func (t *ScanTask) Start() {
 	var s *models.Scene
 
 	t.progress.ExecuteTask("Scanning "+t.FilePath, func() {
@@ -246,7 +245,8 @@ func (t *ScanTask) Start(wg *sizedwaitgroup.SizedWaitGroup) {
 					Overwrite:           false,
 					fileNamingAlgorithm: t.fileNamingAlgorithm,
 				}
-				taskSprite.Start(&iwg)
+				taskSprite.Start()
+				iwg.Done()
 			})
 		}
 
@@ -259,7 +259,8 @@ func (t *ScanTask) Start(wg *sizedwaitgroup.SizedWaitGroup) {
 					fileNamingAlgorithm: t.fileNamingAlgorithm,
 					txnManager:          t.TxnManager,
 				}
-				taskPhash.Start(&iwg)
+				taskPhash.Start()
+				iwg.Done()
 			})
 		}
 
@@ -290,7 +291,8 @@ func (t *ScanTask) Start(wg *sizedwaitgroup.SizedWaitGroup) {
 					Overwrite:           false,
 					fileNamingAlgorithm: t.fileNamingAlgorithm,
 				}
-				taskPreview.Start(wg)
+				taskPreview.Start()
+				iwg.Done()
 			})
 		}
 
@@ -963,9 +965,7 @@ func (t *ScanTask) scanZipImages(zipGallery *models.Gallery) {
 		subTask.zipGallery = zipGallery
 
 		// run the subtask and wait for it to complete
-		iwg := sizedwaitgroup.New(1)
-		iwg.Add()
-		subTask.Start(&iwg)
+		subTask.Start()
 		return nil
 	})
 	if err != nil {

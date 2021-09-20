@@ -82,9 +82,6 @@ func (s *singleton) Import(ctx context.Context) (int, error) {
 	}
 
 	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) {
-		var wg sync.WaitGroup
-		wg.Add(1)
-
 		task := ImportTask{
 			txnManager:          s.TxnManager,
 			BaseDir:             metadataPath,
@@ -93,7 +90,7 @@ func (s *singleton) Import(ctx context.Context) (int, error) {
 			MissingRefBehaviour: models.ImportMissingRefEnumFail,
 			fileNamingAlgorithm: config.GetVideoFileNamingAlgorithm(),
 		}
-		task.Start(&wg)
+		task.Start()
 	})
 
 	return s.JobManager.Add(ctx, "Importing...", j), nil
@@ -125,7 +122,8 @@ func (s *singleton) RunSingleTask(ctx context.Context, t Task) int {
 	wg.Add(1)
 
 	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) {
-		t.Start(&wg)
+		t.Start()
+		wg.Done()
 	})
 
 	return s.JobManager.Add(ctx, t.GetDescription(), j)
@@ -274,7 +272,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 				}
 				wg.Add()
 				go progress.ExecuteTask(fmt.Sprintf("Generating sprites for %s", scene.Path), func() {
-					task.Start(&wg)
+					task.Start()
+					wg.Done()
 				})
 			}
 
@@ -288,7 +287,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 				}
 				wg.Add()
 				go progress.ExecuteTask(fmt.Sprintf("Generating preview for %s", scene.Path), func() {
-					task.Start(&wg)
+					task.Start()
+					wg.Done()
 				})
 			}
 
@@ -303,7 +303,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 					Screenshot:          input.MarkerScreenshots,
 				}
 				go progress.ExecuteTask(fmt.Sprintf("Generating markers for %s", scene.Path), func() {
-					task.Start(&wg)
+					task.Start()
+					wg.Done()
 				})
 			}
 
@@ -315,7 +316,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 					fileNamingAlgorithm: fileNamingAlgo,
 				}
 				go progress.ExecuteTask(fmt.Sprintf("Generating transcode for %s", scene.Path), func() {
-					task.Start(&wg)
+					task.Start()
+					wg.Done()
 				})
 			}
 
@@ -328,7 +330,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 				}
 				wg.Add()
 				go progress.ExecuteTask(fmt.Sprintf("Generating phash for %s", scene.Path), func() {
-					task.Start(&wg)
+					task.Start()
+					wg.Done()
 				})
 			}
 		}
@@ -359,7 +362,8 @@ func (s *singleton) Generate(ctx context.Context, input models.GenerateMetadataI
 				fileNamingAlgorithm: fileNamingAlgo,
 			}
 			go progress.ExecuteTask(fmt.Sprintf("Generating marker preview for marker ID %d", marker.ID), func() {
-				task.Start(&wg)
+				task.Start()
+				wg.Done()
 			})
 		}
 
@@ -409,9 +413,7 @@ func (s *singleton) generateScreenshot(ctx context.Context, sceneId string, at *
 			fileNamingAlgorithm: config.GetInstance().GetVideoFileNamingAlgorithm(),
 		}
 
-		var wg sync.WaitGroup
-		wg.Add(1)
-		task.Start(&wg)
+		task.Start()
 
 		logger.Infof("Generate screenshot finished")
 	})
@@ -595,7 +597,11 @@ func (s *singleton) MigrateHash(ctx context.Context) int {
 			wg.Add(1)
 
 			task := MigrateHashTask{Scene: scene, fileNamingAlgorithm: fileNamingAlgo}
-			go task.Start(&wg)
+			go func() {
+				task.Start()
+				wg.Done()
+			}()
+
 			wg.Wait()
 		}
 
@@ -799,7 +805,8 @@ func (s *singleton) StashBoxBatchPerformerTag(ctx context.Context, input models.
 		for _, task := range tasks {
 			wg.Add(1)
 			progress.ExecuteTask(task.Description(), func() {
-				task.Start(&wg)
+				task.Start()
+				wg.Done()
 			})
 
 			progress.Increment()
