@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func createProgress(m *Manager, j *Job) Progress {
 }
 
 func TestProgressIndefinite(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
@@ -34,7 +35,7 @@ func TestProgressIndefinite(t *testing.T) {
 }
 
 func TestProgressSetTotal(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
@@ -57,7 +58,7 @@ func TestProgressSetTotal(t *testing.T) {
 }
 
 func TestProgressSetProcessed(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
@@ -77,7 +78,7 @@ func TestProgressSetProcessed(t *testing.T) {
 }
 
 func TestProgressSetPercent(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
@@ -97,7 +98,7 @@ func TestProgressSetPercent(t *testing.T) {
 }
 
 func TestProgressIncrement(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
@@ -116,7 +117,7 @@ func TestProgressIncrement(t *testing.T) {
 }
 
 func TestExecuteTask(t *testing.T) {
-	m := NewManager()
+	m := NewManager(context.TODO())
 	j := &Job{}
 
 	p := createProgress(m, j)
