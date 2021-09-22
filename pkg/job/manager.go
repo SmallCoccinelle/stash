@@ -16,87 +16,58 @@ type Manager struct {
 	queue     []*Job
 	graveyard []*Job
 
-	mutex    sync.Mutex
-	notEmpty *sync.Cond
-	stop     chan struct{}
+	mutex     sync.Mutex
+	pending   chan *Job // Pending jobs for the manager
+	completed chan *Job // Jobs which are completed
+	cancelled chan int  // Cancel requests. Sending -1 cancels all jobs
 
-	lastID int
-
+	lastID              int
 	subscriptions       []*ManagerSubscription
 	updateThrottleLimit time.Duration
 }
 
 // NewManager initialises and returns a new Manager.
-func NewManager() *Manager {
+func NewManager(ctx context.Context) *Manager {
 	ret := &Manager{
-		stop:                make(chan struct{}),
+		pending:             make(chan *Job),
+		completed:           make(chan *Job),
+		cancelled:           make(chan int),
 		updateThrottleLimit: defaultThrottleLimit,
 	}
 
-	ret.notEmpty = sync.NewCond(&ret.mutex)
-
-	go ret.dispatcher()
+	go ret.dispatcher(ctx)
 
 	return ret
 }
 
-// Stop is used to stop the dispatcher thread. Once Stop is called, no
-// more Jobs will be processed.
-func (m *Manager) Stop() {
-	m.CancelAll()
-	close(m.stop)
-}
-
 // Add queues a job.
 func (m *Manager) Add(ctx context.Context, description string, e JobExec) int {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	t := time.Now()
-
-	j := Job{
-		ID:          m.nextID(),
-		Status:      StatusReady,
-		Description: description,
-		AddTime:     t,
-		exec:        e,
-		outerCtx:    ctx,
-	}
-
-	m.queue = append(m.queue, &j)
-
-	if len(m.queue) == 1 {
-		// notify that there is now a job in the queue
-		m.notEmpty.Broadcast()
-	}
-
-	m.notifyNewJob(&j)
-
-	return j.ID
+	return m.add(ctx, description, e, false)
 }
 
 // Start adds a job and starts it immediately, concurrently with any other
 // jobs.
 func (m *Manager) Start(ctx context.Context, description string, e JobExec) int {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	return m.add(ctx, description, e, true)
+}
 
+func (m *Manager) add(ctx context.Context, description string, e JobExec, immediate bool) int {
 	t := time.Now()
 
+	ID := m.nextID()
 	j := Job{
-		ID:          m.nextID(),
+		ID:          ID,
 		Status:      StatusReady,
+		Immediate:   immediate,
 		Description: description,
 		AddTime:     t,
 		exec:        e,
 		outerCtx:    ctx,
 	}
 
-	m.queue = append(m.queue, &j)
+	m.pending <- &j
 
-	m.dispatch(&j)
-
-	return j.ID
+	return ID
 }
 
 func (m *Manager) notifyNewJob(j *Job) {
@@ -111,54 +82,86 @@ func (m *Manager) notifyNewJob(j *Job) {
 }
 
 func (m *Manager) nextID() int {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	m.lastID++
 	return m.lastID
 }
 
+// getReadyJob analyzes the queue for job readiness
+// returns a ready job, or nil if no such job exist
 func (m *Manager) getReadyJob() *Job {
-	// assumes lock held
-	for _, j := range m.queue {
-		if j.Status == StatusReady {
-			return j
-		}
-	}
-
-	return nil
-}
-
-func (m *Manager) dispatcher() {
 	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	for {
-		// wait until we have something to process
-		j := m.getReadyJob()
+	running := 0
+	var firstJob *Job
 
-		for j == nil {
-			m.notEmpty.Wait()
+	// Consider all jobs in the queue
+	// Count the running jobs
+	// Find the first job which is ready
+	for _, j := range m.queue {
+		if j.Status == StatusRunning {
+			running++
+		}
 
-			// it's possible that we have been stopped - check here
-			select {
-			case <-m.stop:
-				m.mutex.Unlock()
-				return
-			default:
-				// keep going
-				j = m.getReadyJob()
+		if j.Status == StatusReady {
+			if j.Immediate {
+				// Immediate jobs are always ready for dispatching
+				return j
+			}
+
+			// First ready job found
+			if firstJob == nil {
+				firstJob = j
 			}
 		}
-
-		done := m.dispatch(j)
-
-		// unlock the mutex and wait for the job to finish
-		m.mutex.Unlock()
-		<-done
-		m.mutex.Lock()
-
-		// remove the job from the queue
-		m.removeJob(j)
-
-		// process next job
 	}
+
+	// If there are running jobs, and no immediate jobs available, we are
+	// not ready. Otherwise, select the first ready job from the queue
+	if running > 0 {
+		return nil
+	} else {
+		return firstJob
+	}
+}
+
+func (m *Manager) dispatcher(ctx context.Context) {
+	for {
+		// The invariant for dispatching is that if there's a job
+		// which is ready, we should run said job
+		if j := m.getReadyJob(); j != nil {
+			m.dispatch(j)
+			// Might be more than one job ready, consider them all up-front
+			continue
+		}
+
+		// Handle events which alters the queue/graveyard
+		select {
+		case j := <-m.pending:
+			m.addJob(j)
+		case j := <-m.completed:
+			m.completeJob(j)
+		case id := <-m.cancelled:
+			m.cancelJob(id)
+		case <-ctx.Done():
+			// Cancel everything, drain stopped jobs
+			for remaining := m.cancelJob(-1); remaining > 0; remaining-- {
+				<-m.completed
+			}
+			return
+		}
+	}
+}
+
+func (m *Manager) addJob(j *Job) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.queue = append(m.queue, j)
+	m.notifyNewJob(j)
 }
 
 func (m *Manager) newProgress(j *Job) *Progress {
@@ -171,8 +174,10 @@ func (m *Manager) newProgress(j *Job) *Progress {
 	}
 }
 
-func (m *Manager) dispatch(j *Job) (done chan struct{}) {
-	// assumes lock held
+func (m *Manager) dispatch(j *Job) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	t := time.Now()
 	j.StartTime = &t
 	j.Status = StatusRunning
@@ -180,51 +185,29 @@ func (m *Manager) dispatch(j *Job) (done chan struct{}) {
 	ctx, cancelFunc := context.WithCancel(utils.ValueOnlyContext(j.outerCtx))
 	j.cancelFunc = cancelFunc
 
-	done = make(chan struct{})
 	go func() {
 		progress := m.newProgress(j)
 		j.exec.Execute(ctx, progress)
 
-		m.onJobFinish(j)
-
-		close(done)
+		m.completed <- j
 	}()
 
 	m.notifyJobUpdate(j)
-
-	return
 }
 
-func (m *Manager) onJobFinish(job *Job) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if job.Status == StatusStopping {
-		job.Status = StatusCancelled
-	} else {
-		job.Status = StatusFinished
-	}
-
-	t := time.Now()
-	job.EndTime = &t
-}
-
-func (m *Manager) removeJob(job *Job) {
-	// assumes lock held
-	index, _ := m.getJob(m.queue, job.ID)
-	if index == -1 {
-		return
-	}
-
-	// clear any subtasks
-	job.Details = nil
-
-	m.queue = append(m.queue[:index], m.queue[index+1:]...)
-
+func (m *Manager) addGraveyard(job *Job) {
 	m.graveyard = append(m.graveyard, job)
 	if len(m.graveyard) > maxGraveyardSize {
 		m.graveyard = m.graveyard[1:]
 	}
+}
+
+// removeJob moves a job into the graveyard
+func (m *Manager) removeJob(index int, job *Job) {
+	// Assumes lock is held
+	m.queue = append(m.queue[:index], m.queue[index+1:]...)
+
+	m.addGraveyard(job)
 
 	// notify job removed
 	for _, s := range m.subscriptions {
@@ -234,6 +217,20 @@ func (m *Manager) removeJob(job *Job) {
 		default:
 		}
 	}
+}
+
+func (m *Manager) completeJob(job *Job) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	index, _ := m.getJob(m.queue, job.ID)
+	if index == -1 {
+		return
+	}
+
+	// Mark job as completed, move it to the graveyard
+	job.complete()
+	m.removeJob(index, job)
+
 }
 
 func (m *Manager) getJob(list []*Job, id int) (index int, job *Job) {
@@ -254,35 +251,66 @@ func (m *Manager) getJob(list []*Job, id int) (index int, job *Job) {
 // removed from the queue. If no job exists with the provided id, then there is
 // no effect. Likewise, if the job is already cancelled, there is no effect.
 func (m *Manager) CancelJob(id int) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	_, j := m.getJob(m.queue, id)
-	if j != nil {
-		j.cancel()
-
-		if j.Status == StatusCancelled {
-			// remove from the queue
-			m.removeJob(j)
-		}
-	}
+	m.cancelled <- id
 }
 
 // CancelAll cancels all of the jobs in the queue. This is the same as
 // calling CancelJob on all jobs in the queue.
 func (m *Manager) CancelAll() {
+	m.cancelled <- -1
+}
+
+// cancelJob cancels the job with the given id. It returns the number of
+// jobs which are in the stopping state and will complete.
+func (m *Manager) cancelJob(id int) int {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	// call cancel on all
-	for _, j := range m.queue {
-		j.cancel()
+	stopCount := 0
 
-		if j.Status == StatusCancelled {
-			// add to graveyard
-			m.removeJob(j)
+	// Cancel all jobs
+	if id == -1 {
+		// Go through the queue, and cancel jobs.
+		// - The jobs which are stopping will complete on their own
+		// - The jobs which are canceled are removed from the queue
+		//   and added to the graveyard.
+		var filteredQueue []*Job
+		for _, j := range m.queue {
+			j.cancel()
+			if j.Status == StatusStopping {
+				filteredQueue = append(filteredQueue, j)
+				stopCount++
+			} else {
+				m.addGraveyard(j)
+
+				// notify job removed
+				for _, s := range m.subscriptions {
+					// don't block if channel is full
+					select {
+					case s.removedJob <- *j:
+					default:
+					}
+				}
+			}
 		}
+		m.queue = filteredQueue
+		return stopCount
 	}
+
+	// Cancel job with given id
+	i, j := m.getJob(m.queue, id)
+	if j == nil {
+		return 0
+	}
+
+	j.cancel()
+	if j.Status == StatusCancelled {
+		m.removeJob(i, j)
+	} else if j.Status == StatusStopping {
+		return 1
+	}
+
+	return 0
 }
 
 // GetJob returns a copy of the Job for the provided id. Returns nil if the job
