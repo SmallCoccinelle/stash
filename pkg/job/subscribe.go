@@ -9,10 +9,13 @@ type ManagerSubscription struct {
 	RemovedJob <-chan Job
 	// updated jobs are sent to this channel
 	UpdatedJob <-chan Job
+	// stopped jobs are sent to this channel
+	StoppedJob <-chan Job
 
 	newJob     chan Job
 	removedJob chan Job
 	updatedJob chan Job
+	stoppedJob chan Job
 }
 
 func newSubscription() *ManagerSubscription {
@@ -20,11 +23,13 @@ func newSubscription() *ManagerSubscription {
 		newJob:     make(chan Job, 100),
 		removedJob: make(chan Job, 100),
 		updatedJob: make(chan Job, 100),
+		stoppedJob: make(chan Job, 100),
 	}
 
 	ret.NewJob = ret.newJob
 	ret.RemovedJob = ret.removedJob
 	ret.UpdatedJob = ret.updatedJob
+	ret.StoppedJob = ret.stoppedJob
 
 	return ret
 }
@@ -33,4 +38,5 @@ func (s *ManagerSubscription) close() {
 	close(s.newJob)
 	close(s.removedJob)
 	close(s.updatedJob)
+	close(s.stoppedJob)
 }

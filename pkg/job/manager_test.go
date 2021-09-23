@@ -205,7 +205,11 @@ func TestCancel(t *testing.T) {
 	// cancel running job
 	m.CancelJob(jobID)
 
-	time.Sleep(sleepTime)
+	select {
+	case <-s.stoppedJob:
+	case <-time.After(timeout):
+		t.Error("timeout waiting for job to stop")
+	}
 
 	// expect status to be stopping
 	j = m.GetJob(jobID)

@@ -280,6 +280,12 @@ func (m *Manager) cancelJob(id int) int {
 			if j.Status == StatusStopping {
 				filteredQueue = append(filteredQueue, j)
 				stopCount++
+				for _, s := range m.subscriptions {
+					select {
+					case s.stoppedJob <- *j:
+					default:
+					}
+				}
 			} else {
 				m.addGraveyard(j)
 
@@ -307,6 +313,12 @@ func (m *Manager) cancelJob(id int) int {
 	if j.Status == StatusCancelled {
 		m.removeJob(i, j)
 	} else if j.Status == StatusStopping {
+		for _, s := range m.subscriptions {
+			select {
+			case s.stoppedJob <- *j:
+			default:
+			}
+		}
 		return 1
 	}
 
