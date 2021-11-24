@@ -414,12 +414,13 @@ func (me *Server) serveIcon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	idInt, err := strconv.Atoi(sceneId)
+	if err != nil {
+		return
+	}
+
 	var scene *models.Scene
-	err := me.txnManager.WithReadTxn(r.Context(), func(r models.ReaderRepository) error {
-		idInt, err := strconv.Atoi(sceneId)
-		if err != nil {
-			return nil
-		}
+	err = me.txnManager.WithReadTxn(r.Context(), func(r models.ReaderRepository) error {
 		scene, _ = r.Scene().Find(idInt)
 		return nil
 	})
@@ -555,11 +556,12 @@ func (me *Server) initMux(mux *http.ServeMux) {
 	mux.HandleFunc(resPath, func(w http.ResponseWriter, r *http.Request) {
 		sceneId := r.URL.Query().Get("scene")
 		var scene *models.Scene
-		err := me.txnManager.WithReadTxn(r.Context(), func(r models.ReaderRepository) error {
-			sceneIdInt, err := strconv.Atoi(sceneId)
-			if err != nil {
-				return nil
-			}
+		sceneIdInt, err := strconv.Atoi(sceneId)
+		if err != nil {
+			return
+		}
+
+		err = me.txnManager.WithReadTxn(r.Context(), func(r models.ReaderRepository) error {
 			scene, _ = r.Scene().Find(sceneIdInt)
 			return nil
 		})

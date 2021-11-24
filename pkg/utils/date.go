@@ -13,11 +13,12 @@ func GetYMDFromDatabaseDate(dateString string) string {
 }
 
 func ParseDateStringAsFormat(dateString string, format string) (string, error) {
-	t, e := ParseDateStringAsTime(dateString)
-	if e == nil {
-		return t.Format(format), e
+	t, err := ParseDateStringAsTime(dateString)
+	if err != nil {
+		return "", fmt.Errorf("ParseDateStringAsFormat failed: dateString <%s>, format <%s>", dateString, format)
 	}
-	return "", fmt.Errorf("ParseDateStringAsFormat failed: dateString <%s>, format <%s>", dateString, format)
+
+	return t.Format(format), nil
 }
 
 func ParseDateStringAsTime(dateString string) (time.Time, error) {

@@ -33,6 +33,8 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
+    # - nilerr
+    # - nilnil
 
 # Project-specific linter overrides
 linters-settings:
