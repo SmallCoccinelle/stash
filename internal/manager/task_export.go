@@ -96,8 +96,7 @@ func CreateExportTask(a models.HashAlgorithm, input models.ExportObjectsInput) *
 	}
 }
 
-func (t *ExportTask) Start(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (t *ExportTask) Start(ctx context.Context) {
 	// @manager.total = Scene.count + Gallery.count + Performer.count + Studio.count + Movie.count
 	workerCount := runtime.GOMAXPROCS(0) // set worker count to number of cpus available
 

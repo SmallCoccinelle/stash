@@ -101,14 +101,12 @@ func (s *singleton) Export(ctx context.Context) (int, error) {
 	}
 
 	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) {
-		var wg sync.WaitGroup
-		wg.Add(1)
 		task := ExportTask{
 			txnManager:          s.TxnManager,
 			full:                true,
 			fileNamingAlgorithm: config.GetVideoFileNamingAlgorithm(),
 		}
-		task.Start(ctx, &wg)
+		task.Start(ctx)
 	})
 
 	return s.JobManager.Add(ctx, "Exporting...", j), nil

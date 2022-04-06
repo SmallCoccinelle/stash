@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/remeh/sizedwaitgroup"
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/pkg/file"
 	"github.com/stashapp/stash/pkg/gallery"
@@ -77,7 +76,7 @@ func (t *ScanTask) scanGallery(ctx context.Context) {
 }
 
 // associates a gallery to a scene with the same basename
-func (t *ScanTask) associateGallery(ctx context.Context, wg *sizedwaitgroup.SizedWaitGroup) {
+func (t *ScanTask) associateGallery(ctx context.Context) {
 	path := t.file.Path()
 	if err := t.TxnManager.WithTxn(ctx, func(r models.Repository) error {
 		qb := r.Gallery()
@@ -129,7 +128,6 @@ func (t *ScanTask) associateGallery(ctx context.Context, wg *sizedwaitgroup.Size
 	}); err != nil {
 		logger.Error(err.Error())
 	}
-	wg.Done()
 }
 
 func (t *ScanTask) scanZipImages(ctx context.Context, zipGallery *models.Gallery) {

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/stashapp/stash/internal/manager"
@@ -59,9 +58,7 @@ func (r *mutationResolver) MetadataExport(ctx context.Context) (string, error) {
 func (r *mutationResolver) ExportObjects(ctx context.Context, input models.ExportObjectsInput) (*string, error) {
 	t := manager.CreateExportTask(config.GetInstance().GetVideoFileNamingAlgorithm(), input)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	t.Start(ctx, &wg)
+	t.Start(ctx)
 
 	if t.DownloadHash != "" {
 		baseURL, _ := ctx.Value(BaseURLCtxKey).(string)

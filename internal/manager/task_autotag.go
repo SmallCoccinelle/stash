@@ -480,7 +480,10 @@ func (t *autoTagFilesTask) processScenes(ctx context.Context, r models.ReaderRep
 
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go tt.Start(ctx, &wg)
+			go func() {
+				tt.Start(ctx)
+				wg.Done()
+			}()
 			wg.Wait()
 
 			t.progress.Increment()
@@ -533,7 +536,10 @@ func (t *autoTagFilesTask) processImages(ctx context.Context, r models.ReaderRep
 
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go tt.Start(ctx, &wg)
+			go func() {
+				tt.Start(ctx)
+				wg.Done()
+			}()
 			wg.Wait()
 
 			t.progress.Increment()
@@ -586,7 +592,10 @@ func (t *autoTagFilesTask) processGalleries(ctx context.Context, r models.Reader
 
 			var wg sync.WaitGroup
 			wg.Add(1)
-			go tt.Start(ctx, &wg)
+			go func() {
+				tt.Start(ctx)
+				wg.Done()
+			}()
 			wg.Wait()
 
 			t.progress.Increment()
@@ -653,8 +662,7 @@ type autoTagSceneTask struct {
 	cache *match.Cache
 }
 
-func (t *autoTagSceneTask) Start(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (t *autoTagSceneTask) Start(ctx context.Context) {
 	if err := t.txnManager.WithTxn(ctx, func(r models.Repository) error {
 		if t.performers {
 			if err := autotag.ScenePerformers(t.scene, r.Scene(), r.Performer(), t.cache); err != nil {
@@ -689,8 +697,7 @@ type autoTagImageTask struct {
 	cache *match.Cache
 }
 
-func (t *autoTagImageTask) Start(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (t *autoTagImageTask) Start(ctx context.Context) {
 	if err := t.txnManager.WithTxn(ctx, func(r models.Repository) error {
 		if t.performers {
 			if err := autotag.ImagePerformers(t.image, r.Image(), r.Performer(), t.cache); err != nil {
@@ -725,8 +732,7 @@ type autoTagGalleryTask struct {
 	cache *match.Cache
 }
 
-func (t *autoTagGalleryTask) Start(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (t *autoTagGalleryTask) Start(ctx context.Context) {
 	if err := t.txnManager.WithTxn(ctx, func(r models.Repository) error {
 		if t.performers {
 			if err := autotag.GalleryPerformers(t.gallery, r.Gallery(), r.Performer(), t.cache); err != nil {

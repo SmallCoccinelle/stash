@@ -134,7 +134,10 @@ func (j *ScanJob) Execute(ctx context.Context, progress *job.Progress) {
 				UseFileMetadata: false,
 			}
 
-			go task.associateGallery(ctx, &wg)
+			go func() {
+				task.associateGallery(ctx)
+				wg.Done()
+			}()
 			wg.Wait()
 		}
 		logger.Info("Finished gallery association")
