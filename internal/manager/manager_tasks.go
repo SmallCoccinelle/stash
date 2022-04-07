@@ -113,12 +113,8 @@ func (s *singleton) Export(ctx context.Context) (int, error) {
 }
 
 func (s *singleton) RunSingleTask(ctx context.Context, t Task) int {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) {
 		t.Start(ctx)
-		wg.Done()
 	})
 
 	return s.JobManager.Add(ctx, t.GetDescription(), j)
