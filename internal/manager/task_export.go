@@ -327,7 +327,6 @@ func (t *ExportTask) populateGalleryImages(repo models.ReaderRepository) {
 }
 
 func (t *ExportTask) ExportScenes(workers int, repo models.ReaderRepository) {
-	var scenesWg sync.WaitGroup
 
 	sceneReader := repo.Scene()
 
@@ -349,9 +348,13 @@ func (t *ExportTask) ExportScenes(workers int, repo models.ReaderRepository) {
 	logger.Info("[scenes] exporting")
 	startTime := time.Now()
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Scene workers
-		scenesWg.Add(1)
-		go exportScene(&scenesWg, jobCh, repo, t)
+		wg.Add(1)
+		go func() {
+			exportScene(jobCh, repo, t)
+			wg.Done()
+		}()
 	}
 
 	for i, scene := range scenes {
@@ -365,13 +368,12 @@ func (t *ExportTask) ExportScenes(workers int, repo models.ReaderRepository) {
 	}
 
 	close(jobCh) // close channel so that workers will know no more jobs are available
-	scenesWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[scenes] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func exportScene(wg *sync.WaitGroup, jobChan <-chan *models.Scene, repo models.ReaderRepository, t *ExportTask) {
-	defer wg.Done()
+func exportScene(jobChan <-chan *models.Scene, repo models.ReaderRepository, t *ExportTask) {
 	sceneReader := repo.Scene()
 	studioReader := repo.Studio()
 	movieReader := repo.Movie()
@@ -465,7 +467,6 @@ func exportScene(wg *sync.WaitGroup, jobChan <-chan *models.Scene, repo models.R
 }
 
 func (t *ExportTask) ExportImages(workers int, repo models.ReaderRepository) {
-	var imagesWg sync.WaitGroup
 
 	imageReader := repo.Image()
 
@@ -487,9 +488,13 @@ func (t *ExportTask) ExportImages(workers int, repo models.ReaderRepository) {
 	logger.Info("[images] exporting")
 	startTime := time.Now()
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Image workers
-		imagesWg.Add(1)
-		go exportImage(&imagesWg, jobCh, repo, t)
+		wg.Add(1)
+		go func() {
+			exportImage(jobCh, repo, t)
+			wg.Done()
+		}()
 	}
 
 	for i, image := range images {
@@ -503,13 +508,12 @@ func (t *ExportTask) ExportImages(workers int, repo models.ReaderRepository) {
 	}
 
 	close(jobCh) // close channel so that workers will know no more jobs are available
-	imagesWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[images] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func exportImage(wg *sync.WaitGroup, jobChan <-chan *models.Image, repo models.ReaderRepository, t *ExportTask) {
-	defer wg.Done()
+func exportImage(jobChan <-chan *models.Image, repo models.ReaderRepository, t *ExportTask) {
 	studioReader := repo.Studio()
 	galleryReader := repo.Gallery()
 	performerReader := repo.Performer()
@@ -580,7 +584,6 @@ func (t *ExportTask) getGalleryChecksums(galleries []*models.Gallery) (ret []str
 }
 
 func (t *ExportTask) ExportGalleries(workers int, repo models.ReaderRepository) {
-	var galleriesWg sync.WaitGroup
 
 	reader := repo.Gallery()
 
@@ -602,9 +605,13 @@ func (t *ExportTask) ExportGalleries(workers int, repo models.ReaderRepository) 
 	logger.Info("[galleries] exporting")
 	startTime := time.Now()
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Scene workers
-		galleriesWg.Add(1)
-		go exportGallery(&galleriesWg, jobCh, repo, t)
+		wg.Add(1)
+		go func() {
+			exportGallery(jobCh, repo, t)
+			wg.Done()
+		}()
 	}
 
 	for i, gallery := range galleries {
@@ -623,13 +630,12 @@ func (t *ExportTask) ExportGalleries(workers int, repo models.ReaderRepository) 
 	}
 
 	close(jobCh) // close channel so that workers will know no more jobs are available
-	galleriesWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[galleries] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func exportGallery(wg *sync.WaitGroup, jobChan <-chan *models.Gallery, repo models.ReaderRepository, t *ExportTask) {
-	defer wg.Done()
+func exportGallery(jobChan <-chan *models.Gallery, repo models.ReaderRepository, t *ExportTask) {
 	studioReader := repo.Studio()
 	performerReader := repo.Performer()
 	tagReader := repo.Tag()
@@ -686,7 +692,6 @@ func exportGallery(wg *sync.WaitGroup, jobChan <-chan *models.Gallery, repo mode
 }
 
 func (t *ExportTask) ExportPerformers(workers int, repo models.ReaderRepository) {
-	var performersWg sync.WaitGroup
 
 	reader := repo.Performer()
 	var performers []*models.Performer
@@ -706,9 +711,13 @@ func (t *ExportTask) ExportPerformers(workers int, repo models.ReaderRepository)
 	logger.Info("[performers] exporting")
 	startTime := time.Now()
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Performer workers
-		performersWg.Add(1)
-		go t.exportPerformer(&performersWg, jobCh, repo)
+		wg.Add(1)
+		go func() {
+			t.exportPerformer(jobCh, repo)
+			wg.Done()
+		}()
 	}
 
 	for i, performer := range performers {
@@ -720,14 +729,12 @@ func (t *ExportTask) ExportPerformers(workers int, repo models.ReaderRepository)
 	}
 
 	close(jobCh) // close channel so workers will know that no more jobs are available
-	performersWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[performers] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func (t *ExportTask) exportPerformer(wg *sync.WaitGroup, jobChan <-chan *models.Performer, repo models.ReaderRepository) {
-	defer wg.Done()
-
+func (t *ExportTask) exportPerformer(jobChan <-chan *models.Performer, repo models.ReaderRepository) {
 	performerReader := repo.Performer()
 
 	for p := range jobChan {
@@ -764,7 +771,6 @@ func (t *ExportTask) exportPerformer(wg *sync.WaitGroup, jobChan <-chan *models.
 }
 
 func (t *ExportTask) ExportStudios(workers int, repo models.ReaderRepository) {
-	var studiosWg sync.WaitGroup
 
 	reader := repo.Studio()
 	var studios []*models.Studio
@@ -785,9 +791,13 @@ func (t *ExportTask) ExportStudios(workers int, repo models.ReaderRepository) {
 
 	jobCh := make(chan *models.Studio, workers*2) // make a buffered channel to feed workers
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Studio workers
-		studiosWg.Add(1)
-		go t.exportStudio(&studiosWg, jobCh, repo)
+		wg.Add(1)
+		go func() {
+			t.exportStudio(jobCh, repo)
+			wg.Done()
+		}()
 	}
 
 	for i, studio := range studios {
@@ -799,14 +809,12 @@ func (t *ExportTask) ExportStudios(workers int, repo models.ReaderRepository) {
 	}
 
 	close(jobCh)
-	studiosWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[studios] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func (t *ExportTask) exportStudio(wg *sync.WaitGroup, jobChan <-chan *models.Studio, repo models.ReaderRepository) {
-	defer wg.Done()
-
+func (t *ExportTask) exportStudio(jobChan <-chan *models.Studio, repo models.ReaderRepository) {
 	studioReader := repo.Studio()
 
 	for s := range jobChan {
@@ -829,7 +837,6 @@ func (t *ExportTask) exportStudio(wg *sync.WaitGroup, jobChan <-chan *models.Stu
 }
 
 func (t *ExportTask) ExportTags(workers int, repo models.ReaderRepository) {
-	var tagsWg sync.WaitGroup
 
 	reader := repo.Tag()
 	var tags []*models.Tag
@@ -850,9 +857,13 @@ func (t *ExportTask) ExportTags(workers int, repo models.ReaderRepository) {
 
 	jobCh := make(chan *models.Tag, workers*2) // make a buffered channel to feed workers
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Tag workers
-		tagsWg.Add(1)
-		go t.exportTag(&tagsWg, jobCh, repo)
+		wg.Add(1)
+		go func() {
+			t.exportTag(jobCh, repo)
+			wg.Done()
+		}()
 	}
 
 	for i, tag := range tags {
@@ -867,14 +878,12 @@ func (t *ExportTask) ExportTags(workers int, repo models.ReaderRepository) {
 	}
 
 	close(jobCh)
-	tagsWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[tags] export complete in %s. %d workers used.", time.Since(startTime), workers)
 }
 
-func (t *ExportTask) exportTag(wg *sync.WaitGroup, jobChan <-chan *models.Tag, repo models.ReaderRepository) {
-	defer wg.Done()
-
+func (t *ExportTask) exportTag(jobChan <-chan *models.Tag, repo models.ReaderRepository) {
 	tagReader := repo.Tag()
 
 	for thisTag := range jobChan {
@@ -900,7 +909,6 @@ func (t *ExportTask) exportTag(wg *sync.WaitGroup, jobChan <-chan *models.Tag, r
 }
 
 func (t *ExportTask) ExportMovies(workers int, repo models.ReaderRepository) {
-	var moviesWg sync.WaitGroup
 
 	reader := repo.Movie()
 	var movies []*models.Movie
@@ -921,9 +929,13 @@ func (t *ExportTask) ExportMovies(workers int, repo models.ReaderRepository) {
 
 	jobCh := make(chan *models.Movie, workers*2) // make a buffered channel to feed workers
 
+	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ { // create export Studio workers
-		moviesWg.Add(1)
-		go t.exportMovie(&moviesWg, jobCh, repo)
+		wg.Add(1)
+		go func() {
+			t.exportMovie(jobCh, repo)
+			wg.Done()
+		}()
 	}
 
 	for i, movie := range movies {
@@ -935,14 +947,12 @@ func (t *ExportTask) ExportMovies(workers int, repo models.ReaderRepository) {
 	}
 
 	close(jobCh)
-	moviesWg.Wait()
+	wg.Wait()
 
 	logger.Infof("[movies] export complete in %s. %d workers used.", time.Since(startTime), workers)
 
 }
-func (t *ExportTask) exportMovie(wg *sync.WaitGroup, jobChan <-chan *models.Movie, repo models.ReaderRepository) {
-	defer wg.Done()
-
+func (t *ExportTask) exportMovie(jobChan <-chan *models.Movie, repo models.ReaderRepository) {
 	movieReader := repo.Movie()
 	studioReader := repo.Studio()
 
