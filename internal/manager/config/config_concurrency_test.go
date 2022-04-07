@@ -15,6 +15,7 @@ func TestConcurrentConfigAccess(t *testing.T) {
 	for k := 0; k < workers; k++ {
 		wg.Add(1)
 		go func(wk int) {
+			defer wg.Done()
 			for l := 0; l < loops; l++ {
 				if err := i.SetInitialMemoryConfig(); err != nil {
 					t.Errorf("Failure setting initial configuration in worker %v iteration %v: %v", wk, l, err)
@@ -110,7 +111,6 @@ func TestConcurrentConfigAccess(t *testing.T) {
 				i.Set(ContinuePlaylistDefault, i.GetContinuePlaylistDefault())
 				i.Set(PythonPath, i.GetPythonPath())
 			}
-			wg.Done()
 		}(k)
 	}
 
