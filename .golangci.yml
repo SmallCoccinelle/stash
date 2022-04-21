@@ -18,7 +18,7 @@ linters:
     - unused
     - varcheck
     # Linters added by the stash project.
-    # - contextcheck
+    - contextcheck
     - dogsled
     - errchkjson
     - errorlint
